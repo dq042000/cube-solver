@@ -55,7 +55,7 @@ button:focus-visible,.btn:focus-within,input:focus-visible{outline:3px solid var
 
 /* 裁切畫面 */
 .cropwrap{position:relative;max-width:100%;touch-action:none;border-radius:10px;overflow:hidden;background:#000}
-#crop{display:block;width:100%;height:auto}
+#crop,#scanCv{display:block;width:100%;height:auto}
 input[type=range]{width:100%;accent-color:var(--accent)}
 
 /* 展開圖 */
@@ -105,11 +105,23 @@ details summary{cursor:pointer;font-weight:700}
     <h2 id="shotTitle"></h2>
     <p class="how" id="shotHow"></p>
     <div class="row">
-      <label class="btn primary grow" for="cam">拍這一面<input type="file" id="cam" accept="image/*" capture="environment"></label>
+      <button id="scanBtn" class="primary grow" type="button">用相機掃描</button>
+      <label class="btn grow" for="cam">拍這一面<input type="file" id="cam" accept="image/*" capture="environment"></label>
       <button id="demo" type="button">用範例試玩</button>
     </div>
     <div id="shotWarn" class="msg bad" hidden></div>
     <p class="muted">拍的時候：方塊放畫面正中間、塞滿大半個畫面、避開強烈反光。</p>
+  </section>
+
+  <section class="panel" id="scanPanel" hidden>
+    <h2 id="scanTitle"></h2>
+    <p class="how" id="scanHow"></p>
+    <div class="cropwrap"><canvas id="scanCv"></canvas></div>
+    <p class="muted" id="scanState"></p>
+    <div class="row">
+      <button id="scanStop" type="button">停止</button>
+      <button id="scanGrab" class="primary grow" type="button">直接收下這面</button>
+    </div>
   </section>
 
   <section class="panel" id="cropPanel" hidden>
@@ -309,7 +321,7 @@ function renderShoot(){
   const done=S.shot>=6;
   $('shotTitle').textContent=done?'6 面都拍好了':`第 ${S.shot+1} 張：${NAME[ORDER[S.shot]]}（${cn(ORDER[S.shot])}中心）`;
   $('shotHow').innerHTML=done?'檢查下面的展開圖，顏色不對就點格子修正。':howText(ORDER[S.shot]);
-  $('cam').disabled=done;$('cam').parentElement.hidden=done;
+  $('cam').disabled=done;$('cam').parentElement.hidden=done;$('scanBtn').hidden=done;
 }
 
 // 裁切
@@ -333,14 +345,14 @@ function openCrop(){
 }
 function cells(){const out=[],c=G.s/3,x0=G.x-G.s/2,y0=G.y-G.s/2;
   for(let rr=0;rr<3;rr++)for(let cc=0;cc<3;cc++)out.push([x0+c*(cc+.5),y0+c*(rr+.5),c]);return out;}
-function drawCrop(){
-  cctx.drawImage(work,0,0);const x0=G.x-G.s/2,y0=G.y-G.s/2,lw=Math.max(2,work.width/250);
-  cctx.fillStyle='rgba(0,0,0,.5)';
-  cctx.fillRect(0,0,work.width,y0);cctx.fillRect(0,y0+G.s,work.width,work.height);
-  cctx.fillRect(0,y0,x0,G.s);cctx.fillRect(x0+G.s,y0,work.width,G.s);
-  cctx.strokeStyle='#fff';cctx.lineWidth=lw;
-  for(let i=0;i<=3;i++){const p=G.s/3*i;cctx.beginPath();cctx.moveTo(x0+p,y0);cctx.lineTo(x0+p,y0+G.s);cctx.moveTo(x0,y0+p);cctx.lineTo(x0+G.s,y0+p);cctx.stroke();}
-  cells().forEach(([cx,cy,c])=>{const h=c*0.22;cctx.strokeStyle='rgba(255,255,255,.9)';cctx.lineWidth=lw/2;cctx.strokeRect(cx-h,cy-h,h*2,h*2);});
+function drawCrop(ctx=cctx){
+  ctx.drawImage(work,0,0);const x0=G.x-G.s/2,y0=G.y-G.s/2,lw=Math.max(2,work.width/250);
+  ctx.fillStyle='rgba(0,0,0,.5)';
+  ctx.fillRect(0,0,work.width,y0);ctx.fillRect(0,y0+G.s,work.width,work.height);
+  ctx.fillRect(0,y0,x0,G.s);ctx.fillRect(x0+G.s,y0,work.width,G.s);
+  ctx.strokeStyle='#fff';ctx.lineWidth=lw;
+  for(let i=0;i<=3;i++){const p=G.s/3*i;ctx.beginPath();ctx.moveTo(x0+p,y0);ctx.lineTo(x0+p,y0+G.s);ctx.moveTo(x0,y0+p);ctx.lineTo(x0+G.s,y0+p);ctx.stroke();}
+  cells().forEach(([cx,cy,c])=>{const h=c*0.22;ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=lw/2;ctx.strokeRect(cx-h,cy-h,h*2,h*2);});
 }
 function toImg(ev){const r=crop.getBoundingClientRect();return[(ev.clientX-r.left)*work.width/r.width,(ev.clientY-r.top)*work.height/r.height];}
 let drag=null;
@@ -362,15 +374,71 @@ function sample(){
     return ch.map(a=>{a.sort((p,q)=>p-q);return a[a.length>>1];});   // 中位數，減少反光干擾
   });
 }
-$('okCrop').addEventListener('click',()=>{
-  const F=ORDER[S.shot];S.rgb[F]=sample();S.shot++;
+$('okCrop').addEventListener('click',()=>{accept(sample());closeCrop();afterData();if(S.shot>=6)$('netPanel').scrollIntoView({block:'start'});});
+function accept(rgb){
+  const F=ORDER[S.shot];S.rgb[F]=rgb;S.shot++;
   const got=nearestStd(S.rgb[F][4]);
   $('shotWarn').hidden=got===SCHEME[F];
   $('shotWarn').textContent=`剛拍的${NAME[F]}，中心看起來像${STD[got].n}色，應該是${cn(F)}。如果真的拍錯面，按「全部重來」；只是光線造成的就不用管。`;
   while(S.shot<6&&S.rgb[ORDER[S.shot]])S.shot++;
-  closeCrop();afterData();
-  if(S.shot>=6)$('netPanel').scrollIntoView({block:'start'});
+}
+
+// 即時掃描：九宮格固定在畫面中間，拿穩一下就自動收下
+const scanCv=$('scanCv'),sctx=scanCv.getContext('2d'),video=document.createElement('video');
+video.muted=true;video.playsInline=true;
+let stream=null,scanLoop=0,prevLab=null,stableSince=0,holdUntil=0,beepCtx=null;
+$('scanBtn').addEventListener('click',async()=>{
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alertBox('這個瀏覽器不能開相機，請改用「拍這一面」。');return;}
+  try{beepCtx=beepCtx||new (window.AudioContext||window.webkitAudioContext)();}catch(e){}
+  try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280}},audio:false});}
+  catch(e){alertBox('相機打不開（'+e.name+'）。請允許使用相機，或改用「拍這一面」。');return;}
+  video.srcObject=stream;await video.play();
+  $('shootPanel').hidden=true;$('scanPanel').hidden=false;$('scanPanel').scrollIntoView({block:'start'});
+  prevLab=null;holdUntil=performance.now()+800;renderScan();scanLoop=requestAnimationFrame(scanTick);
 });
+function stopScan(){
+  cancelAnimationFrame(scanLoop);if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;
+  $('scanPanel').hidden=true;$('shootPanel').hidden=false;$('shootPanel').scrollIntoView({block:'start'});
+}
+function renderScan(){
+  const F=ORDER[S.shot];
+  $('scanTitle').textContent=`第 ${S.shot+1} 面：${NAME[F]}（${cn(F)}中心）`;
+  $('scanHow').innerHTML=howText(F);
+  $('scanState').textContent='把這一面塞滿九宮格，拿穩不動，聽到「嗶」就換下一面。';
+}
+function beep(){
+  if(navigator.vibrate)navigator.vibrate(80);
+  if(!beepCtx)return;
+  try{const o=beepCtx.createOscillator(),g=beepCtx.createGain();o.frequency.value=880;g.gain.value=0.15;
+    o.connect(g);g.connect(beepCtx.destination);o.start();o.stop(beepCtx.currentTime+0.12);}catch(e){}
+}
+function scanTick(t){
+  scanLoop=requestAnimationFrame(scanTick);
+  if(!video.videoWidth)return;
+  const k=Math.min(1,480/Math.max(video.videoWidth,video.videoHeight));
+  const w=Math.round(video.videoWidth*k),h=Math.round(video.videoHeight*k);
+  if(work.width!==w||work.height!==h){work.width=w;work.height=h;}
+  if(scanCv.width!==w||scanCv.height!==h){scanCv.width=w;scanCv.height=h;}
+  wctx.drawImage(video,0,0,w,h);
+  G={x:w/2,y:h/2,s:Math.min(w,h)*0.7};
+  drawCrop(sctx);
+  const rgb=sample(),L=rgb.map(lab);
+  const moved=!prevLab||Math.max(...L.map((c,i)=>dist(c,prevLab[i])))>12;
+  prevLab=L;
+  if(moved){stableSince=t;return;}
+  if(t<holdUntil||t-stableSince<600)return;
+  // 中心要跟已收下的每一面都不一樣，才不會把還沒轉走的同一面收兩次
+  if(ORDER.some(F=>S.rgb[F]&&dist(lab(S.rgb[F][4]),L[4])<25)){
+    $('scanState').textContent='這一面已經收過了，請照上面的提示轉到下一面。';return;}
+  grab(rgb);
+}
+function grab(rgb){
+  accept(rgb||sample());beep();afterData();
+  if(S.shot>=6){stopScan();$('netPanel').scrollIntoView({block:'start'});return;}
+  holdUntil=performance.now()+1000;stableSince=performance.now();renderScan();
+}
+$('scanGrab').addEventListener('click',()=>grab());
+$('scanStop').addEventListener('click',stopScan);
 
 // ---------- 展開圖 ----------
 function faceHTML(F,get,small){
@@ -407,7 +475,7 @@ $('demo').addEventListener('click',()=>{
   S.shot=6;P={};$('solPanel').hidden=true;afterData();
   $('netHint').textContent='這是隨機打亂的範例。要解自己的方塊，按「全部重來」再拍。';
 });
-$('reset').addEventListener('click',()=>{S=fresh();P={};$('shotWarn').hidden=true;$('solPanel').hidden=true;$('netHint').textContent='拍完 6 面後，顏色認錯的格子點一下就會換顏色。';afterData();window.scrollTo(0,0);});
+$('reset').addEventListener('click',()=>{if(stream)stopScan();S=fresh();P={};$('shotWarn').hidden=true;$('solPanel').hidden=true;$('netHint').textContent='拍完 6 面後，顏色認錯的格子點一下就會換顏色。';afterData();window.scrollTo(0,0);});
 $('solve').addEventListener('click',()=>{if(!S.valid)return;solve();});
 
 // ---------- 解法播放 ----------
