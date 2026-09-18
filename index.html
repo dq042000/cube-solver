@@ -49,6 +49,7 @@ button:focus-visible,.btn:focus-within,input:focus-visible{outline:3px solid var
 .shot b{display:block;font-family:var(--mono);font-size:15px;color:var(--ink)}
 .shot.done{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
 .shot.now{border:2px solid var(--accent);color:var(--ink)}
+.shot.bad{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
 
 .how{font-size:17px;font-weight:500}
 .how em{font-style:normal;font-weight:900}
@@ -317,12 +318,22 @@ function howText(F){
 }
 function nearestStd(c){let bi=0,bd=1e9;STD.forEach((s,i)=>{const dd=dist(lab(c),lab(s.rgb));if(dd<bd){bd=dd;bi=i}});return bi;}
 function renderShoot(){
-  $('shots').innerHTML=ORDER.map((F,i)=>`<div class="shot ${S.rgb[F]?'done':''} ${i===S.shot?'now':''}"><b>${i+1}</b><span class="dot" style="background:${S.disp[F]};width:12px;height:12px"></span> ${NAME[F]}</div>`).join('');
+  // 中心顏色跟這一步該有的顏色不同，就當作拍錯面
+  const bad=ORDER.filter(F=>S.rgb[F]&&nearestStd(S.rgb[F][4])!==SCHEME[F]);
+  $('shots').innerHTML=ORDER.map((F,i)=>`<button type="button" class="shot ${S.rgb[F]?'done':''} ${bad.includes(F)?'bad':''} ${i===S.shot?'now':''}" data-i="${i}" aria-label="${S.rgb[F]?'重拍':'拍'}${NAME[F]}"><b>${i+1}</b><span class="dot" style="background:${S.disp[F]};width:12px;height:12px"></span> ${NAME[F]}</button>`).join('');
+  $('shotWarn').hidden=!bad.length;
+  $('shotWarn').textContent=bad.map(F=>`第 ${ORDER.indexOf(F)+1} 張${NAME[F]}的中心看起來像${STD[nearestStd(S.rgb[F][4])].n}色，應該是${cn(F)}。`).join('')+`點上面的「${bad.map(F=>ORDER.indexOf(F)+1).join('」「')}」就能重拍；如果只是光線造成的，可以不管。`;
   const done=S.shot>=6;
   $('shotTitle').textContent=done?'6 面都拍好了':`第 ${S.shot+1} 張：${NAME[ORDER[S.shot]]}（${cn(ORDER[S.shot])}中心）`;
   $('shotHow').innerHTML=done?'檢查下面的展開圖，顏色不對就點格子修正。':howText(ORDER[S.shot]);
   $('cam').disabled=done;$('cam').parentElement.hidden=done;$('scanBtn').hidden=done;
 }
+// 點進度列的某一面：清掉那面，回到那面重拍，其他面保留
+$('shots').addEventListener('click',e=>{
+  const b=e.target.closest('.shot');if(!b)return;
+  S.shot=+b.dataset.i;delete S.rgb[ORDER[S.shot]];P={};$('solPanel').hidden=true;
+  afterData();$('shootPanel').scrollIntoView({block:'start'});
+});
 
 // 裁切
 const work=document.createElement('canvas'),wctx=work.getContext('2d',{willReadFrequently:true});
@@ -377,9 +388,6 @@ function sample(){
 $('okCrop').addEventListener('click',()=>{accept(sample());closeCrop();afterData();if(S.shot>=6)$('netPanel').scrollIntoView({block:'start'});});
 function accept(rgb){
   const F=ORDER[S.shot];S.rgb[F]=rgb;S.shot++;
-  const got=nearestStd(S.rgb[F][4]);
-  $('shotWarn').hidden=got===SCHEME[F];
-  $('shotWarn').textContent=`剛拍的${NAME[F]}，中心看起來像${STD[got].n}色，應該是${cn(F)}。如果真的拍錯面，按「全部重來」；只是光線造成的就不用管。`;
   while(S.shot<6&&S.rgb[ORDER[S.shot]])S.shot++;
 }
 
@@ -483,7 +491,7 @@ function showCheck(t,bad){const c=$('check');c.hidden=!t;c.textContent=t||'';c.c
 function runCheck(){
   if(!S.labels){showCheck('',false);refreshSolveBtn();return;}
   const err=validate(S.labels);S.valid=!err;
-  showCheck(err||'顏色檢查通過，可以算解法了。',!!err);refreshSolveBtn();
+  showCheck(err?err+'如果是整面拍歪或拍錯，點最上面那排的那一面重拍。':'顏色檢查通過，可以算解法了。',!!err);refreshSolveBtn();
 }
 function refreshSolveBtn(){$('solve').disabled=!(S.valid&&(ready||mainMode));}
 function afterData(){
@@ -499,7 +507,7 @@ $('demo').addEventListener('click',()=>{
   S.shot=6;P={};$('solPanel').hidden=true;afterData();
   $('netHint').textContent='這是隨機打亂的範例。要解自己的方塊，按「全部重來」再拍。';
 });
-$('reset').addEventListener('click',()=>{if(stream)stopScan();S=fresh();P={};$('shotWarn').hidden=true;$('solPanel').hidden=true;$('netHint').textContent='拍完 6 面後，顏色認錯的格子點一下就會換顏色。';afterData();window.scrollTo(0,0);});
+$('reset').addEventListener('click',()=>{if(stream)stopScan();S=fresh();P={};$('solPanel').hidden=true;$('netHint').textContent='拍完 6 面後，顏色認錯的格子點一下就會換顏色。';afterData();window.scrollTo(0,0);});
 $('solve').addEventListener('click',()=>{if(!S.valid)return;solve();});
 
 // ---------- 解法播放 ----------
