@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>拍照解方塊</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  --bg:#EEF0EC; --surface:#FFFFFF; --sunk:#E3E6E0; --ink:#15181A; --muted:#5A625C;
+  --line:#CFD4CC; --accent:#0A6E4F; --accent-ink:#FFFFFF; --warn:#B3261E; --warn-bg:#FBE9E7;
+  --ok:#0A6E4F; --ok-bg:#E2F2EA; --plastic:#1B1D1F;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121513; --surface:#1B1F1C; --sunk:#252A26; --ink:#ECEFEA; --muted:#A1AAA3;
+    --line:#343B36; --accent:#3FBF8F; --accent-ink:#06140E; --warn:#FF8A7A; --warn-bg:#3A1C19;
+    --ok:#3FBF8F; --ok-bg:#16301F; --plastic:#050606;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121513; --surface:#1B1F1C; --sunk:#252A26; --ink:#ECEFEA; --muted:#A1AAA3;
+  --line:#343B36; --accent:#3FBF8F; --accent-ink:#06140E; --warn:#FF8A7A; --warn-bg:#3A1C19;
+  --ok:#3FBF8F; --ok-bg:#16301F; --plastic:#050606;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.55;padding-inline:16px;padding-block:16px 48px}
+main{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font-size:26px;font-weight:900;margin:0;letter-spacing:.02em;text-wrap:balance}
+h2{font-size:18px;font-weight:700;margin:0;text-wrap:balance}
+p{margin:0}
+.muted{color:var(--muted);font-size:14px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button,.btn{font:inherit;font-weight:700;border-radius:10px;border:1px solid var(--line);background:var(--sunk);color:var(--ink);padding:12px 16px;cursor:pointer;min-height:48px}
+button.primary,.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:default}
+button:focus-visible,.btn:focus-within,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.btn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.grow{flex:1 1 auto}
+
+/* 進度：6 面拍攝狀態 */
+.shots{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.shot{border-radius:8px;border:1px solid var(--line);background:var(--sunk);text-align:center;padding:6px 2px;font-size:13px;color:var(--muted)}
+.shot b{display:block;font-family:var(--mono);font-size:15px;color:var(--ink)}
+.shot.done{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.shot.now{border:2px solid var(--accent);color:var(--ink)}
+
+.how{font-size:17px;font-weight:500}
+.how em{font-style:normal;font-weight:900}
+
+/* 裁切畫面 */
+.cropwrap{position:relative;max-width:100%;touch-action:none;border-radius:10px;overflow:hidden;background:#000}
+#crop{display:block;width:100%;height:auto}
+input[type=range]{width:100%;accent-color:var(--accent)}
+
+/* 展開圖 */
+.netbox{overflow-x:auto}
+.net{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;max-width:440px;margin:0 auto}
+.face{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:3px;background:var(--plastic);border-radius:6px;aspect-ratio:1}
+.face.hot{box-shadow:0 0 0 3px var(--accent)}
+.st{border:0;padding:0;min-height:0;border-radius:3px;aspect-ratio:1;background:#6b6f6c;cursor:pointer}
+.st.empty{background:repeating-linear-gradient(45deg,#3a3d3b 0 4px,#2c2f2d 4px 8px);cursor:default}
+.st.center{cursor:default;box-shadow:inset 0 0 0 2px rgba(0,0,0,.35)}
+.net.small{max-width:300px;gap:4px}
+.net.small .face{padding:2px;gap:1px;border-radius:4px}
+.net.small .st{border-radius:2px;cursor:default}
+
+.msg{border-radius:10px;padding:12px 14px;font-weight:500}
+.msg.bad{background:var(--warn-bg);color:var(--warn)}
+.msg.good{background:var(--ok-bg);color:var(--ok)}
+
+/* 解法播放 */
+.hold{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-weight:500}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:3px 10px 3px 4px;background:var(--sunk);font-size:14px}
+.dot{width:18px;height:18px;border-radius:4px;display:inline-block;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.stage{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center;background:var(--sunk);border-radius:12px;padding:16px}
+.big{font-family:var(--mono);font-weight:700;font-size:64px;line-height:1;min-width:2.2ch;text-align:center}
+.say{font-size:19px;font-weight:700}
+.counter{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--muted);font-size:14px}
+.moves{display:flex;flex-wrap:wrap;gap:6px}
+.mv{font-family:var(--mono);font-weight:700;min-height:40px;min-width:48px;padding:6px 8px;font-size:16px;background:var(--surface)}
+.mv.past{opacity:.4}
+.mv.cur{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.legend{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
+.legend code{font-family:var(--mono);font-weight:700}
+details summary{cursor:pointer;font-weight:700}
+@media (prefers-reduced-motion:no-preference){ .mv,.st{transition:background-color .15s} }
+</style>
+</head>
+<body>
+
+<main>
+  <header style="display:flex;flex-direction:column;gap:6px">
+    <h1>拍照解方塊</h1>
+    <p class="muted">拿法固定：黃上、紅前、綠右、藍左、橘後、白下。照順序拍 6 面，自動辨色，算出 20 步上下的解法，再一步一步帶你轉。</p>
+  </header>
+
+  <section class="panel" id="shootPanel">
+    <div class="shots" id="shots"></div>
+    <h2 id="shotTitle"></h2>
+    <p class="how" id="shotHow"></p>
+    <div class="row">
+      <label class="btn primary grow" for="cam">拍這一面<input type="file" id="cam" accept="image/*" capture="environment"></label>
+      <button id="demo" type="button">用範例試玩</button>
+    </div>
+    <div id="shotWarn" class="msg bad" hidden></div>
+    <p class="muted">拍的時候：方塊放畫面正中間、塞滿大半個畫面、避開強烈反光。</p>
+  </section>
+
+  <section class="panel" id="cropPanel" hidden>
+    <h2>把九宮格對準方塊</h2>
+    <p class="muted">拖曳移動格子，用滑桿調大小。每格中間的小點要落在貼紙上。</p>
+    <div class="cropwrap"><canvas id="crop"></canvas></div>
+    <label for="size" class="muted">格子大小</label>
+    <input type="range" id="size" min="15" max="100" value="60">
+    <div class="row">
+      <button id="rot" type="button">轉 90°</button>
+      <button id="cancelCrop" type="button">重拍</button>
+      <button id="okCrop" class="primary grow" type="button">這面好了</button>
+    </div>
+  </section>
+
+  <section class="panel" id="netPanel">
+    <div class="row" style="justify-content:space-between">
+      <h2>方塊展開圖</h2>
+      <button id="reset" type="button" style="min-height:40px;padding:6px 12px">全部重來</button>
+    </div>
+    <p class="muted" id="netHint">拍完 6 面後，顏色認錯的格子點一下就會換顏色。</p>
+    <div class="netbox"><div class="net" id="net"></div></div>
+    <div id="check" class="msg" hidden></div>
+    <button id="solve" class="primary" type="button" disabled>算出解法</button>
+    <p class="muted" id="engine">解題引擎準備中…</p>
+  </section>
+
+  <section class="panel" id="solPanel" hidden>
+    <h2 id="solTitle"></h2>
+    <div class="hold" id="hold"></div>
+    <div class="stage">
+      <div class="big" id="bigMove"></div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div class="say" id="say"></div>
+        <div class="counter" id="counter"></div>
+      </div>
+    </div>
+    <div class="row">
+      <button id="prev" type="button" class="grow">← 上一步</button>
+      <button id="next" type="button" class="primary grow">下一步 →</button>
+    </div>
+    <p class="muted" id="better"></p>
+    <div class="moves" id="moves"></div>
+    <p class="muted">轉完這一步，方塊應該長這樣：</p>
+    <div class="netbox"><div class="net small" id="afterNet"></div></div>
+    <details>
+      <summary>符號怎麼看</summary>
+      <div class="legend" style="margin-top:8px">
+        <code>R</code><span>字母＝哪一層：U 頂、D 底、F 正面、B 背面、L 左、R 右</span>
+        <code>R</code><span>只有字母＝對著那一面看，順時針轉 90°</span>
+        <code>R'</code><span>加撇號＝逆時針轉 90°</span>
+        <code>R2</code><span>加 2＝轉 180°，哪個方向都行</span>
+      </div>
+      <p class="muted" style="margin-top:8px">全程保持同一個拿法，不要翻動整顆方塊。</p>
+    </details>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/cube.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/solve.js"></script>
+<script>
+(function(){
+const CDN='https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/';
+const FACES=['U','R','F','D','L','B'];           // cubejs 字串順序
+const ORDER=['F','R','B','L','U','D'];           // 拍攝順序
+const NAME={U:'頂面',R:'右面',F:'正面',D:'底面',L:'左面',B:'背面'};
+const NET_POS={U:[1,0],L:[0,1],F:[1,1],R:[2,1],B:[3,1],D:[1,2]};
+const $=id=>document.getElementById(id);
+
+// 標準貼紙色：顯示用與取色名
+const STD=[
+  {n:'白',hex:'#F2F2EC',rgb:[235,235,228]},{n:'黃',hex:'#FFD500',rgb:[250,210,20]},
+  {n:'紅',hex:'#C41E3A',rgb:[190,30,45]},{n:'橘',hex:'#FF6A00',rgb:[250,110,20]},
+  {n:'藍',hex:'#0051BA',rgb:[20,80,180]},{n:'綠',hex:'#009E60',rgb:[20,155,90]}];
+// 固定拿法：黃上、紅前、綠右、藍左、橘後、白下（值是 STD 的索引）
+const SCHEME={U:1,F:2,R:5,L:4,B:3,D:0};
+const EXAMPLE_RGB={};FACES.forEach(F=>EXAMPLE_RGB[F]=STD[SCHEME[F]].rgb);
+const cn=F=>STD[SCHEME[F]].n+'色';
+
+// 角塊與邊塊在 54 格字串裡的位置（與 cubejs 相同）
+const u=x=>x-1,r=x=>8+x,f=x=>17+x,d=x=>26+x,l=x=>35+x,b=x=>44+x;
+const CF=[[u(9),r(1),f(3)],[u(7),f(1),l(3)],[u(1),l(1),b(3)],[u(3),b(1),r(3)],[d(3),f(9),r(7)],[d(1),l(9),f(7)],[d(7),b(9),l(7)],[d(9),r(9),b(7)]];
+const CC=[['U','R','F'],['U','F','L'],['U','L','B'],['U','B','R'],['D','F','R'],['D','L','F'],['D','B','L'],['D','R','B']];
+const EF=[[u(6),r(2)],[u(8),f(2)],[u(4),l(2)],[u(2),b(2)],[d(6),r(8)],[d(2),f(8)],[d(4),l(8)],[d(8),b(8)],[f(6),r(4)],[f(4),l(6)],[b(6),l(4)],[b(4),r(6)]];
+const EC=[['U','R'],['U','F'],['U','L'],['U','B'],['D','R'],['D','F'],['D','L'],['D','B'],['F','R'],['F','L'],['B','L'],['B','R']];
+
+let S=fresh();
+function fresh(){const disp={},cname={};FACES.forEach(F=>{disp[F]=STD[SCHEME[F]].hex;cname[F]=cn(F);});return {rgb:{},labels:null,shot:0,disp,cname};}
+
+// ---------- 顏色 ----------
+function lab(c){
+  const lin=v=>{v/=255;return v>0.04045?Math.pow((v+0.055)/1.055,2.4):v/12.92};
+  const R=lin(c[0]),G=lin(c[1]),B=lin(c[2]);
+  let X=(R*0.4124+G*0.3576+B*0.1805)/0.95047,Y=R*0.2126+G*0.7152+B*0.0722,Z=(R*0.0193+G*0.1192+B*0.9505)/1.08883;
+  const g=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;
+  X=g(X);Y=g(Y);Z=g(Z);
+  return [116*Y-16,500*(X-Y),200*(Y-Z)];
+}
+function dist(a,b){return Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);}
+const hex=c=>'#'+c.map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+
+// 每面 9 格分給 6 個中心色，每色剛好 9 格（中心 1 + 其他 8）
+function classify(){
+  const lb={};FACES.forEach(F=>lb[F]=lab(S.rgb[F][4]));
+  const pairs=[],labels=new Array(54).fill(null),cap={};
+  FACES.forEach((F,fi)=>{cap[F]=0;labels[fi*9+4]=F;
+    for(let k=0;k<9;k++){if(k===4)continue;const L=lab(S.rgb[F][k]);
+      FACES.forEach(C=>pairs.push([dist(L,lb[C]),fi*9+k,C]));}});
+  pairs.sort((a,b)=>a[0]-b[0]);
+  for(const [,i,C] of pairs){if(labels[i]||cap[C]>=8)continue;labels[i]=C;cap[C]++;}
+  S.labels=labels;
+}
+
+// ---------- 檢查狀態合不合理 ----------
+function parity(p){let s=0;const seen=[];for(let i=0;i<p.length;i++){if(seen[i])continue;let j=i,len=0;while(!seen[j]){seen[j]=1;j=p[j];len++}s+=len-1}return s%2;}
+function validate(L){
+  const cnt={};L.forEach(c=>cnt[c]=(cnt[c]||0)+1);
+  const off=FACES.filter(F=>cnt[F]!==9);
+  if(off.length)return '顏色數量不對：'+off.map(F=>S.cname[F]+' '+(cnt[F]||0)+' 格').join('、')+'（每色要剛好 9 格）。點格子修正。';
+  const cp=[],co=[];let ctw=0;
+  for(let i=0;i<8;i++){
+    const c=CF[i].map(x=>L[x]);let o=c.findIndex(x=>x==='U'||x==='D');
+    if(o<0)return '有一個角塊沒有頂面或底面的顏色，多半是某一面拍的方向轉錯了。';
+    const j=CC.findIndex(p=>p[1]===c[(o+1)%3]&&p[2]===c[(o+2)%3]);
+    if(j<0)return '有一個角塊的顏色組合不存在，多半是某一面拍的方向轉錯，或有格子認錯色。';
+    if(cp.includes(j))return '有兩個一模一樣的角塊，請檢查格子顏色。';
+    cp.push(j);ctw+=o;}
+  const ep=[];let flip=0;
+  for(let i=0;i<12;i++){
+    const a=L[EF[i][0]],b2=L[EF[i][1]];let j=EC.findIndex(p=>p[0]===a&&p[1]===b2),o=0;
+    if(j<0){j=EC.findIndex(p=>p[0]===b2&&p[1]===a);o=1;}
+    if(j<0)return '有一個邊塊的顏色組合不存在，請檢查格子顏色。';
+    if(ep.includes(j))return '有兩個一模一樣的邊塊，請檢查格子顏色。';
+    ep.push(j);flip+=o;}
+  if(ctw%3)return '有一個角塊被扭轉過（拆裝過的方塊常見），這樣的狀態轉不回來。也可能是某格認錯色。';
+  if(flip%2)return '有一個邊塊被翻轉過（拆裝過的方塊常見），這樣的狀態轉不回來。也可能是某格認錯色。';
+  if(parity(cp)!==parity(ep))return '有兩塊被對調過（拆裝過的方塊常見），這樣的狀態轉不回來。也可能是某格認錯色。';
+  return null;
+}
+
+// ---------- 解題（背景 worker，失敗就改在主執行緒） ----------
+let worker=null,ready=false,mainMode=false,jobId=0;
+function startWorker(){
+  ready=false;
+  const src=`importScripts('${CDN}cube.js','${CDN}solve.js');Cube.initSolver();postMessage({t:'ready'});
+function ok(s,m){var c=Cube.fromString(s);if(m)c.move(m);return c.isSolved();}
+function n(m){return m?m.split(' ').length:0;}
+onmessage=function(e){var id=e.data.id,s=e.data.s,best=Cube.fromString(s).solve(22);
+ if(!ok(s,best)){postMessage({t:'fail',id:id});return;}
+ postMessage({t:'sol',id:id,m:best});
+ for(var dd=n(best)-1;dd>=16&&n(best)>0;dd=n(best)-1){var x;try{x=Cube.fromString(s).solve(dd);}catch(err){break;}
+  if(!x||n(x)>dd||!ok(s,x))break;best=x;postMessage({t:'sol',id:id,m:best});}
+ postMessage({t:'done',id:id});};`;
+  try{
+    worker=new Worker(URL.createObjectURL(new Blob([src],{type:'text/javascript'})));
+    worker.onmessage=onWorker;
+    worker.onerror=e=>{e.preventDefault&&e.preventDefault();toMain();};
+  }catch(e){toMain();}
+  engine('解題引擎準備中…（舊手機可能要半分鐘）');
+}
+function toMain(){if(worker){worker.terminate();worker=null;}mainMode=true;ready=typeof Cube!=='undefined'&&!!Cube.initSolver;
+  engine(ready?'解題引擎就緒（按下「算出解法」時會卡住幾秒，正常）':'解題引擎載入失敗，請確認網路後重新整理。');refreshSolveBtn();}
+function engine(t){$('engine').textContent=t;}
+let busy=false;
+function onWorker(e){const m=e.data;
+  if(m.t==='ready'){ready=true;engine('解題引擎就緒');refreshSolveBtn();return;}
+  if(m.id!==jobId)return;
+  if(m.t==='fail'){busy=false;P.searching=false;showCheck('算不出解法，請再檢查一次格子顏色。',true);return;}
+  if(m.t==='sol'){busy=false;gotSolution(m.m);}
+  if(m.t==='done'){P.searching=false;renderBetter();}
+}
+function solve(){
+  const s=S.labels.join('');
+  const wasBusy=busy||P.searching;P={start:s,searching:!mainMode};
+  if(mainMode){engine('計算中…');setTimeout(()=>{if(!Cube._ok){Cube.initSolver();Cube._ok=1;}const m=Cube.fromString(s).solve(22);P.searching=false;gotSolution(m);engine('解題引擎就緒');},50);return;}
+  if(wasBusy){worker.terminate();startWorker();}   // 放棄舊工作，重開
+  jobId++;busy=true;
+  const send=()=>worker.postMessage({id:jobId,s});
+  if(ready)send();else{const w=worker,id=jobId;const t=setInterval(()=>{if(worker!==w){clearInterval(t);return;}if(ready){clearInterval(t);if(id===jobId)send();}},200);}
+  engine('計算中…');
+}
+
+// ---------- 拍攝流程 ----------
+function howText(F){
+  switch(F){
+    case 'F':return '<em>黃色</em>中心朝上，<em>紅色</em>中心對著鏡頭。前 4 張都讓黃色保持朝上。';
+    case 'R':return '黃色不動，把整顆方塊<em>往左轉 90°</em>，讓<em>綠色</em>中心對著鏡頭。';
+    case 'B':return '黃色不動，再<em>往左轉 90°</em>，讓<em>橘色</em>中心對著鏡頭。';
+    case 'L':return '黃色不動，再<em>往左轉 90°</em>，讓<em>藍色</em>中心對著鏡頭。';
+    case 'U':return '再往左轉 90°，回到紅色對著你、黃色朝上。然後把<em>黃色那面往你這邊翻下來</em>對著鏡頭：<em>紅色</em>那面要在照片的<em>下方</em>。';
+    case 'D':return '回到紅色對著你、黃色朝上。然後把<em>白色那面往上翻</em>對著鏡頭：<em>紅色</em>那面要在照片的<em>上方</em>。';
+  }
+}
+function nearestStd(c){let bi=0,bd=1e9;STD.forEach((s,i)=>{const dd=dist(lab(c),lab(s.rgb));if(dd<bd){bd=dd;bi=i}});return bi;}
+function renderShoot(){
+  $('shots').innerHTML=ORDER.map((F,i)=>`<div class="shot ${S.rgb[F]?'done':''} ${i===S.shot?'now':''}"><b>${i+1}</b><span class="dot" style="background:${S.disp[F]};width:12px;height:12px"></span> ${NAME[F]}</div>`).join('');
+  const done=S.shot>=6;
+  $('shotTitle').textContent=done?'6 面都拍好了':`第 ${S.shot+1} 張：${NAME[ORDER[S.shot]]}（${cn(ORDER[S.shot])}中心）`;
+  $('shotHow').innerHTML=done?'檢查下面的展開圖，顏色不對就點格子修正。':howText(ORDER[S.shot]);
+  $('cam').disabled=done;$('cam').parentElement.hidden=done;
+}
+
+// 裁切
+const work=document.createElement('canvas'),wctx=work.getContext('2d',{willReadFrequently:true});
+const crop=$('crop'),cctx=crop.getContext('2d');
+let G={x:0,y:0,s:0};
+$('cam').addEventListener('change',e=>{
+  const file=e.target.files[0];if(!file)return;
+  const url=URL.createObjectURL(file),img=new Image();
+  img.onload=()=>{const k=Math.min(1,900/Math.max(img.width,img.height));
+    work.width=Math.round(img.width*k);work.height=Math.round(img.height*k);
+    wctx.drawImage(img,0,0,work.width,work.height);URL.revokeObjectURL(url);openCrop();};
+  img.onerror=()=>{alertBox('這張照片讀不出來，請再拍一次。');};
+  img.src=url;e.target.value='';
+});
+function openCrop(){
+  crop.width=work.width;crop.height=work.height;
+  const m=Math.min(work.width,work.height);G={x:work.width/2,y:work.height/2,s:m*0.6};
+  $('size').value=60;$('shootPanel').hidden=true;$('cropPanel').hidden=false;drawCrop();
+  $('cropPanel').scrollIntoView({block:'start'});
+}
+function cells(){const out=[],c=G.s/3,x0=G.x-G.s/2,y0=G.y-G.s/2;
+  for(let rr=0;rr<3;rr++)for(let cc=0;cc<3;cc++)out.push([x0+c*(cc+.5),y0+c*(rr+.5),c]);return out;}
+function drawCrop(){
+  cctx.drawImage(work,0,0);const x0=G.x-G.s/2,y0=G.y-G.s/2,lw=Math.max(2,work.width/250);
+  cctx.fillStyle='rgba(0,0,0,.5)';
+  cctx.fillRect(0,0,work.width,y0);cctx.fillRect(0,y0+G.s,work.width,work.height);
+  cctx.fillRect(0,y0,x0,G.s);cctx.fillRect(x0+G.s,y0,work.width,G.s);
+  cctx.strokeStyle='#fff';cctx.lineWidth=lw;
+  for(let i=0;i<=3;i++){const p=G.s/3*i;cctx.beginPath();cctx.moveTo(x0+p,y0);cctx.lineTo(x0+p,y0+G.s);cctx.moveTo(x0,y0+p);cctx.lineTo(x0+G.s,y0+p);cctx.stroke();}
+  cells().forEach(([cx,cy,c])=>{const h=c*0.22;cctx.strokeStyle='rgba(255,255,255,.9)';cctx.lineWidth=lw/2;cctx.strokeRect(cx-h,cy-h,h*2,h*2);});
+}
+function toImg(ev){const r=crop.getBoundingClientRect();return[(ev.clientX-r.left)*work.width/r.width,(ev.clientY-r.top)*work.height/r.height];}
+let drag=null;
+crop.addEventListener('pointerdown',ev=>{crop.setPointerCapture(ev.pointerId);const[x,y]=toImg(ev);drag={x,y,gx:G.x,gy:G.y};});
+crop.addEventListener('pointermove',ev=>{if(!drag)return;const[x,y]=toImg(ev);G.x=drag.gx+x-drag.x;G.y=drag.gy+y-drag.y;drawCrop();});
+crop.addEventListener('pointerup',()=>drag=null);crop.addEventListener('pointercancel',()=>drag=null);
+$('size').addEventListener('input',e=>{G.s=Math.min(work.width,work.height)*e.target.value/100;drawCrop();});
+$('rot').addEventListener('click',()=>{const t=document.createElement('canvas');t.width=work.height;t.height=work.width;
+  const tc=t.getContext('2d');tc.translate(t.width,0);tc.rotate(Math.PI/2);tc.drawImage(work,0,0);
+  work.width=t.width;work.height=t.height;wctx.drawImage(t,0,0);openCrop();});
+$('cancelCrop').addEventListener('click',closeCrop);
+function closeCrop(){$('cropPanel').hidden=true;$('shootPanel').hidden=false;}
+function sample(){
+  return cells().map(([cx,cy,c])=>{const h=Math.max(2,Math.round(c*0.22));
+    const x=Math.max(0,Math.round(cx-h)),y=Math.max(0,Math.round(cy-h));
+    const w=Math.max(1,Math.min(work.width-x,h*2)),hh=Math.max(1,Math.min(work.height-y,h*2));
+    const px=wctx.getImageData(x,y,w,hh).data,ch=[[],[],[]];
+    for(let i=0;i<px.length;i+=4){ch[0].push(px[i]);ch[1].push(px[i+1]);ch[2].push(px[i+2]);}
+    return ch.map(a=>{a.sort((p,q)=>p-q);return a[a.length>>1];});   // 中位數，減少反光干擾
+  });
+}
+$('okCrop').addEventListener('click',()=>{
+  const F=ORDER[S.shot];S.rgb[F]=sample();S.shot++;
+  const got=nearestStd(S.rgb[F][4]);
+  $('shotWarn').hidden=got===SCHEME[F];
+  $('shotWarn').textContent=`剛拍的${NAME[F]}，中心看起來像${STD[got].n}色，應該是${cn(F)}。如果真的拍錯面，按「全部重來」；只是光線造成的就不用管。`;
+  while(S.shot<6&&S.rgb[ORDER[S.shot]])S.shot++;
+  closeCrop();afterData();
+  if(S.shot>=6)$('netPanel').scrollIntoView({block:'start'});
+});
+
+// ---------- 展開圖 ----------
+function faceHTML(F,get,small){
+  return `<div class="face" style="grid-column:${NET_POS[F][0]+1};grid-row:${NET_POS[F][1]+1}">`+
+    Array.from({length:9},(_,k)=>{const v=get(F,k);
+      return v?`<button type="button" class="st ${k===4?'center':''}" data-i="${FACES.indexOf(F)*9+k}" style="background:${v}" aria-label="${NAME[F]}第${k+1}格" ${small||k===4?'tabindex="-1"':''}></button>`
+              :`<span class="st empty"></span>`;}).join('')+'</div>';
+}
+function renderNet(){
+  const get=(F,k)=>S.labels?S.disp[S.labels[FACES.indexOf(F)*9+k]]:(S.rgb[F]?hex(S.rgb[F][k]):null);
+  $('net').innerHTML=FACES.map(F=>faceHTML(F,get,false)).join('');
+}
+$('net').addEventListener('click',e=>{
+  const b=e.target.closest('.st[data-i]');if(!b||!S.labels)return;const i=+b.dataset.i;if(i%9===4)return;
+  S.labels[i]=FACES[(FACES.indexOf(S.labels[i])+1)%6];renderNet();runCheck();
+});
+function showCheck(t,bad){const c=$('check');c.hidden=!t;c.textContent=t||'';c.className='msg '+(bad?'bad':'good');}
+function runCheck(){
+  if(!S.labels){showCheck('',false);refreshSolveBtn();return;}
+  const err=validate(S.labels);S.valid=!err;
+  showCheck(err||'顏色檢查通過，可以算解法了。',!!err);refreshSolveBtn();
+}
+function refreshSolveBtn(){$('solve').disabled=!(S.valid&&(ready||mainMode));}
+function afterData(){
+  if(FACES.every(F=>S.rgb[F])){classify();}else{S.labels=null;S.valid=false;}
+  renderShoot();renderNet();runCheck();
+}
+function alertBox(t){showCheck(t,true);}
+
+$('demo').addEventListener('click',()=>{
+  if(typeof Cube==='undefined'){alertBox('範例需要解題引擎，請確認網路後重新整理。');return;}
+  const s=Cube.random().asString();S=fresh();
+  FACES.forEach((F,fi)=>S.rgb[F]=Array.from({length:9},(_,k)=>EXAMPLE_RGB[s[fi*9+k]]));
+  S.shot=6;P={};$('solPanel').hidden=true;afterData();
+  $('netHint').textContent='這是隨機打亂的範例。要解自己的方塊，按「全部重來」再拍。';
+});
+$('reset').addEventListener('click',()=>{S=fresh();P={};$('shotWarn').hidden=true;$('solPanel').hidden=true;$('netHint').textContent='拍完 6 面後，顏色認錯的格子點一下就會換顏色。';afterData();window.scrollTo(0,0);});
+$('solve').addEventListener('click',()=>{if(!S.valid)return;solve();});
+
+// ---------- 解法播放 ----------
+let P={};
+const SAY={U:'頂層往左轉 ←',"U'":'頂層往右轉 →',D:'底層往右轉 →',"D'":'底層往左轉 ←',
+  R:'右排往上轉 ↑（遠離你）',"R'":'右排往下轉 ↓（朝向你）',L:'左排往下轉 ↓（朝向你）',"L'":'左排往上轉 ↑（遠離你）',
+  F:'正面順時針轉 ↻',"F'":'正面逆時針轉 ↺',B:'背面那層，從正面看逆時針 ↺',"B'":'背面那層，從正面看順時針 ↻'};
+function sayMove(m){return m[1]==='2'?({U:'頂層',D:'底層',R:'右排',L:'左排',F:'正面',B:'背面那層'})[m[0]]+'轉 180°（哪個方向都行）':SAY[m];}
+function gotSolution(m){
+  const list=m?m.split(' '):[];
+  if(P.moves&&P.i>0){P.pending=list;renderBetter();engine('解題引擎就緒');return;}   // 已經開始轉了，不打斷
+  P.moves=list;P.i=0;P.pending=null;
+  $('solPanel').hidden=false;renderSol();
+  if(!P.shown){P.shown=1;$('solPanel').scrollIntoView({block:'start'});}
+  engine(P.searching?'已給出解法，背景繼續找更短的…':'解題引擎就緒');
+}
+function renderBetter(){
+  const el=$('better');
+  if(P.pending&&P.pending.length<P.moves.length){el.innerHTML=`找到更短的 ${P.pending.length} 步解法。<button type="button" id="usePending" style="min-height:36px;padding:4px 10px">改用這個（從頭開始）</button>`;
+    $('usePending').onclick=()=>{P.moves=P.pending;P.pending=null;P.i=0;renderSol();};}
+  else el.textContent=P.searching?'背景還在找更短的解法，找到會自動換上（開始轉之後就不會換）。':'';
+  if(!P.searching)engine('解題引擎就緒');
+}
+function renderSol(){
+  const n=P.moves.length;
+  $('solTitle').textContent=n?`${n} 步還原`:'方塊已經是還原的狀態';
+  $('hold').innerHTML=`拿法：<span class="chip"><span class="dot" style="background:${S.disp.F}"></span>${S.cname.F}中心對著你</span><span class="chip"><span class="dot" style="background:${S.disp.U}"></span>${S.cname.U}中心朝上</span>`;
+  const m=P.moves[P.i];
+  $('bigMove').textContent=n?(P.i<n?m:'✓'):'✓';
+  $('say').textContent=!n?'不用轉。':(P.i<n?sayMove(m):'完成！六面應該都同色了。');
+  $('counter').textContent=n?`第 ${Math.min(P.i+1,n)} / ${n} 步`:'';
+  $('prev').disabled=P.i===0;$('next').disabled=!n||P.i>=n;
+  $('next').textContent=P.i===n-1?'轉完了 ✓':'下一步 →';
+  $('moves').innerHTML=P.moves.map((x,k)=>`<button type="button" class="mv ${k<P.i?'past':''} ${k===P.i?'cur':''}" data-k="${k}">${x}</button>`).join('');
+  // 轉完這一步的樣子
+  const c=Cube.fromString(P.start||S.labels.join(''));const upto=P.moves.slice(0,Math.min(P.i+1,n));if(upto.length)c.move(upto.join(' '));
+  const st=c.asString();
+  $('afterNet').innerHTML=FACES.map(F=>faceHTML(F,(G,k)=>S.disp[st[FACES.indexOf(G)*9+k]],true)).join('');
+  renderBetter();
+}
+$('prev').addEventListener('click',()=>{if(P.i>0){P.i--;renderSol();}});
+$('next').addEventListener('click',()=>{if(P.i<P.moves.length){P.i++;renderSol();}});
+$('moves').addEventListener('click',e=>{const b=e.target.closest('.mv');if(!b)return;P.i=+b.dataset.k;renderSol();});
+
+// 開始
+if(typeof Worker!=='undefined')startWorker();else toMain();
+renderShoot();renderNet();
+})();
+</script>
+</body>
+</html>
