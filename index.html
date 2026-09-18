@@ -352,7 +352,7 @@ $('rot').addEventListener('click',()=>{const t=document.createElement('canvas');
   const tc=t.getContext('2d');tc.translate(t.width,0);tc.rotate(Math.PI/2);tc.drawImage(work,0,0);
   work.width=t.width;work.height=t.height;wctx.drawImage(t,0,0);openCrop();});
 $('cancelCrop').addEventListener('click',closeCrop);
-function closeCrop(){$('cropPanel').hidden=true;$('shootPanel').hidden=false;}
+function closeCrop(){$('cropPanel').hidden=true;$('shootPanel').hidden=false;$('shootPanel').scrollIntoView({block:'start'});}
 function sample(){
   return cells().map(([cx,cy,c])=>{const h=Math.max(2,Math.round(c*0.22));
     const x=Math.max(0,Math.round(cx-h)),y=Math.max(0,Math.round(cy-h));
