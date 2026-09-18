@@ -386,7 +386,7 @@ function accept(rgb){
 // 即時掃描：九宮格固定在畫面中間，拿穩一下就自動收下
 const scanCv=$('scanCv'),sctx=scanCv.getContext('2d'),video=document.createElement('video');
 video.muted=true;video.playsInline=true;
-let stream=null,scanLoop=0,prevLab=null,stableSince=0,holdUntil=0,beepCtx=null;
+let stream=null,scanLoop=0,prevLab=null,stableSince=0,holdUntil=0,beepCtx=null,gotAt=-1e9,warn='';
 $('scanBtn').addEventListener('click',async()=>{
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alertBox('這個瀏覽器不能開相機，請改用「拍這一面」。');return;}
   try{beepCtx=beepCtx||new (window.AudioContext||window.webkitAudioContext)();}catch(e){}
@@ -412,6 +412,24 @@ function beep(){
   try{const o=beepCtx.createOscillator(),g=beepCtx.createGain();o.frequency.value=880;g.gain.value=0.15;
     o.connect(g);g.connect(beepCtx.destination);o.start();o.stop(beepCtx.currentTime+0.12);}catch(e){}
 }
+// 提示直接畫在鏡頭畫面上：拿著方塊時眼睛只會看這裡
+function drawScanHint(t){
+  const F=ORDER[S.shot],w=scanCv.width,h=scanCv.height,fs=Math.round(Math.min(w,h)/14),bh=Math.round(fs*1.8);
+  sctx.fillStyle='rgba(0,0,0,.7)';sctx.fillRect(0,0,w,bh);
+  sctx.fillStyle=S.disp[F];sctx.fillRect(fs*.5,(bh-fs)/2,fs,fs);
+  sctx.fillStyle='#fff';sctx.font=`700 ${fs}px sans-serif`;sctx.textBaseline='middle';sctx.textAlign='left';
+  sctx.fillText(`${S.shot+1}/6　對準${cn(F)}中心`,fs*1.9,bh/2);
+  if(t-gotAt<1200){   // 剛收下一面：大字提示該換面了
+    sctx.fillStyle='rgba(0,0,0,.6)';sctx.fillRect(0,h/2-fs*1.4,w,fs*2.8);
+    sctx.fillStyle='#fff';sctx.textAlign='center';sctx.font=`700 ${Math.round(fs*1.2)}px sans-serif`;
+    sctx.fillText(`✓ 收好了！換${cn(F)}那面`,w/2,h/2);
+  }
+  if(warn){   // 對準的面不對：畫面下方紅字
+    sctx.fillStyle='rgba(180,20,30,.85)';sctx.fillRect(0,h-bh,w,bh);
+    sctx.fillStyle='#fff';sctx.textAlign='center';sctx.font=`700 ${fs}px sans-serif`;
+    sctx.fillText(warn,w/2,h-bh/2);
+  }
+}
 function scanTick(t){
   scanLoop=requestAnimationFrame(scanTick);
   if(!video.videoWidth)return;
@@ -421,19 +439,25 @@ function scanTick(t){
   if(scanCv.width!==w||scanCv.height!==h){scanCv.width=w;scanCv.height=h;}
   wctx.drawImage(video,0,0,w,h);
   G={x:w/2,y:h/2,s:Math.min(w,h)*0.7};
-  drawCrop(sctx);
+  drawCrop(sctx);drawScanHint(t);
   const rgb=sample(),L=rgb.map(lab);
   const moved=!prevLab||Math.max(...L.map((c,i)=>dist(c,prevLab[i])))>12;
   prevLab=L;
-  if(moved){stableSince=t;return;}
+  if(moved){stableSince=t;warn='';return;}
   if(t<holdUntil||t-stableSince<600)return;
   // 中心要跟已收下的每一面都不一樣，才不會把還沒轉走的同一面收兩次
   if(ORDER.some(F=>S.rgb[F]&&dist(lab(S.rgb[F][4]),L[4])<25)){
+    warn='這面收過了，請轉到下一面';
     $('scanState').textContent='這一面已經收過了，請照上面的提示轉到下一面。';return;}
+  // 中心顏色要是這一步指定的顏色才收，轉到一半停住也不會收錯面
+  const F=ORDER[S.shot],got=nearestStd(rgb[4]);
+  if(got!==SCHEME[F]){
+    warn=`這是${STD[got].n}色，請換成${cn(F)}`;
+    $('scanState').textContent=`現在對準的是${STD[got].n}色中心，請換成${cn(F)}中心。如果確定沒拿錯、只是光線讓顏色認錯，按「直接收下這面」。`;return;}
   grab(rgb);
 }
 function grab(rgb){
-  accept(rgb||sample());beep();afterData();
+  accept(rgb||sample());beep();afterData();gotAt=performance.now();warn='';
   if(S.shot>=6){stopScan();$('netPanel').scrollIntoView({block:'start'});return;}
   holdUntil=performance.now()+1000;stableSince=performance.now();renderScan();
 }
